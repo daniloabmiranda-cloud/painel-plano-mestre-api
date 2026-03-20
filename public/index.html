@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Campanhas — Masterplan</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:    #06090f;
+  --bg2:   #0b1018;
+  --bg3:   #101521;
+  --card:  #0f1520;
+  --card2: #141c2b;
+  --border: rgba(255,255,255,0.06);
+  --border2: rgba(255,255,255,0.12);
+  --text:  #dde4f0;
+  --muted: #5a6880;
+  --dim:   #8a97b0;
+  --pe:  #00e5b0;
+  --mm:  #a78bfa;
+  --ub:  #fb923c;
+  --hv:  #f43f5e;
+  --good: #22c55e;
+  --ok:   #eab308;
+  --warn: #ef4444;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Instrument Sans',sans-serif; min-height:100vh; overflow-x:hidden; }
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:#1f2d45; border-radius:10px; }
+
+/* HEADER */
+header {
+  position:sticky; top:0; z-index:200;
+  background:rgba(6,9,15,0.92); backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  height:58px; display:flex; align-items:center;
+  justify-content:space-between; padding:0 32px;
+}
+.logo { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:1rem; letter-spacing:.05em; text-transform:uppercase; }
+.logo em { color:var(--pe); font-style:normal; }
+.header-right { display:flex; align-items:center; gap:12px; }
+.period-pill { font-size:.72rem; font-weight:600; color:var(--dim); background:var(--bg3); border:1px solid var(--border2); padding:5px 14px; border-radius:20px; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 0 3px rgba(34,197,94,0.2); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,0.2); } 50% { box-shadow:0 0 0 6px rgba(34,197,94,0.08); } }
+.refresh-btn { background:rgba(0,229,176,0.1); border:1px solid rgba(0,229,176,0.2); color:var(--pe); padding:5px 14px; border-radius:20px; font-size:.72rem; font-weight:600; cursor:pointer; transition:all .2s; }
+.refresh-btn:hover { background:rgba(0,229,176,0.2); }
+
+/* NAV */
+nav { background:var(--bg2); border-bottom:1px solid var(--border); display:flex; padding:0 32px; overflow-x:auto; gap:2px; }
+nav::-webkit-scrollbar { height:0; }
+.tab { font-family:'Bricolage Grotesque',sans-serif; font-size:.78rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:15px 20px; color:var(--muted); border:none; background:none; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; transition:color .2s,border-color .2s; display:flex; align-items:center; gap:8px; }
+.tab:hover { color:var(--text); }
+.tab.act-all { color:var(--text); border-bottom-color:var(--text); }
+.tab.act-pe  { color:var(--pe);  border-bottom-color:var(--pe); }
+.tab.act-mm  { color:var(--mm);  border-bottom-color:var(--mm); }
+.tab.act-ub  { color:var(--ub);  border-bottom-color:var(--ub); }
+.tab.act-hv  { color:var(--hv);  border-bottom-color:var(--hv); }
+
+/* MAIN */
+main { max-width:1380px; margin:0 auto; padding:32px 32px 64px; }
+.page { display:none; animation:fadeUp .35s ease both; }
+.page.show { display:block; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+/* LOADING */
+.loading-overlay {
+  position:fixed; inset:0; background:rgba(6,9,15,0.9);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:999; gap:16px;
+}
+.loading-overlay.hidden { display:none; }
+.spinner {
+  width:40px; height:40px; border:3px solid var(--border2);
+  border-top-color:var(--pe); border-radius:50%;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { color:var(--dim); font-size:.9rem; }
+
+/* ERROR */
+.error-bar {
+  background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3);
+  color:#f87171; padding:12px 20px; border-radius:10px;
+  margin-bottom:20px; font-size:.82rem; display:none;
+}
+.error-bar.show { display:block; }
+
+/* PAGE HEADER */
+.ph { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+.ph-title { font-family:'Bricolage Grotesque',sans-serif; font-size:1.9rem; font-weight:800; display:flex; align-items:center; gap:12px; line-height:1; }
+.ph-accent { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+.ph-sub { font-size:.8rem; color:var(--muted); margin-top:6px; }
+.last-update { font-size:.72rem; color:var(--muted); }
+
+/* SECTION LABEL */
+.sl { font-family:'Bricolage Grotesque',sans-serif; font-size:.65rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:28px 0 14px; display:flex; align-items:center; gap:10px; }
+.sl::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* DATE FILTER */
+.date-filter { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
+.df-btn { background:var(--card); border:1px solid var(--border); color:var(--muted); padding:6px 16px; border-radius:20px; font-size:.75rem; font-weight:600; cursor:pointer; transition:all .2s; }
+.df-btn:hover { border-color:var(--border2); color:var(--text); }
+.df-btn.active { background:rgba(0,229,176,0.1); border-color:var(--pe); color:var(--pe); }
+
+/* KPIS */
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+.kpi { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; position:relative; overflow:hidden; transition:transform .2s,border-color .2s; }
+.kpi:hover { transform:translateY(-2px); border-color:var(--border2); }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--kc,var(--pe)); border-radius:14px 14px 0 0; }
+.kpi-tag { font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.kpi-val { font-family:'Bricolage Grotesque',sans-serif; font-size:1.9rem; font-weight:800; line-height:1; color:var(--text); }
+.kpi-val.accent { color:var(--kc,var(--pe)); }
+.kpi-sub { font-size:.72rem; color:var(--muted); margin-top:5px; }
+.perf { display:inline-flex; align-items:center; gap:5px; font-size:.65rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:3px 9px; border-radius:20px; margin-top:6px; }
+.perf-good { background:rgba(34,197,94,0.12); color:#4ade80; }
+.perf-ok   { background:rgba(234,179,8,0.12);  color:#facc15; }
+.perf-warn { background:rgba(239,68,68,0.12);  color:#f87171; }
+
+/* GRIDS */
+.grid-2  { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.grid-3  { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.grid-32 { display:grid; grid-template-columns:3fr 2fr; gap:16px; }
+.grid-23 { display:grid; grid-template-columns:2fr 3fr; gap:16px; }
+@media (max-width:900px) { .grid-2,.grid-3,.grid-32,.grid-23 { grid-template-columns:1fr; } }
+
+/* CHART CARD */
+.chart-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:22px 24px; }
+.chart-title { font-family:'Bricolage Grotesque',sans-serif; font-size:.82rem; font-weight:700; letter-spacing:.04em; margin-bottom:18px; color:var(--text); }
+.chart-wrap { position:relative; }
+
+/* FUNNEL */
+.funnel { display:flex; flex-direction:column; gap:4px; padding:4px 0; }
+.funnel-step { display:flex; align-items:center; gap:14px; }
+.funnel-bar-wrap { flex:1; position:relative; }
+.funnel-bar-bg { height:38px; background:rgba(255,255,255,0.04); border-radius:8px; overflow:hidden; display:flex; align-items:center; }
+.funnel-bar-fill { height:100%; border-radius:8px; transition:width 1.2s cubic-bezier(.16,1,.3,1); display:flex; align-items:center; padding:0 14px; }
+.funnel-bar-label { font-family:'Bricolage Grotesque',sans-serif; font-size:.85rem; font-weight:700; color:rgba(0,0,0,0.8); white-space:nowrap; }
+.funnel-meta { min-width:110px; text-align:right; }
+.funnel-name { font-size:.72rem; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
+.funnel-num { font-family:'Bricolage Grotesque',sans-serif; font-size:1rem; font-weight:700; color:var(--text); }
+.funnel-pct { font-size:.68rem; color:var(--muted); }
+.funnel-arrow { text-align:center; color:var(--muted); font-size:.75rem; padding:2px 0; display:flex; align-items:center; gap:14px; }
+.funnel-arrow-line { flex:1; display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.7rem; }
+.funnel-arrow-rate { min-width:110px; text-align:right; font-size:.7rem; color:var(--dim); }
+
+/* BADGES */
+.plat { display:inline-block; font-size:.65rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:3px 9px; border-radius:6px; white-space:nowrap; }
+.plat-meta   { background:rgba(24,119,242,0.15); color:#60a5fa; }
+.plat-google { background:rgba(234,67,53,0.14);  color:#f87171; }
+.plat-maps   { background:rgba(0,229,176,0.12);  color:var(--pe); }
+.plat-pmax   { background:rgba(255,172,28,0.14); color:#fbbf24; }
+.sb { display:inline-block; font-size:.62rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:3px 8px; border-radius:5px; }
+.sb-on  { background:rgba(34,197,94,0.12);  color:#4ade80; }
+.sb-off { background:rgba(255,255,255,0.06); color:var(--muted); }
+
+/* TABLE */
+.tbl-wrap { background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+table { width:100%; border-collapse:collapse; font-size:.8rem; }
+thead { background:rgba(255,255,255,0.025); }
+th { padding:11px 16px; text-align:left; font-family:'Bricolage Grotesque',sans-serif; font-size:.63rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+td { padding:11px 16px; border-top:1px solid var(--border); }
+tr:hover td { background:rgba(255,255,255,0.015); }
+
+/* STAT CARD */
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:20px 22px; }
+.stat-head { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+.stat-title { font-family:'Bricolage Grotesque',sans-serif; font-size:.9rem; font-weight:700; }
+.stat-r { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+.stat-r:last-child { border-bottom:none; }
+.stat-k { font-size:.78rem; color:var(--muted); }
+.stat-v { font-family:'Bricolage Grotesque',sans-serif; font-size:.88rem; font-weight:600; }
+
+/* COMPANY CARD */
+.co-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+.co-card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:24px; cursor:pointer; transition:transform .2s,border-color .2s,box-shadow .2s; position:relative; overflow:hidden; }
+.co-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--cc,#fff); }
+.co-card:hover { transform:translateY(-4px); border-color:var(--cc,#fff); box-shadow:0 16px 40px -12px rgba(0,0,0,0.6); }
+.co-name { font-family:'Bricolage Grotesque',sans-serif; font-size:1.15rem; font-weight:800; color:var(--cc,#fff); margin-bottom:3px; }
+.co-type { font-size:.73rem; color:var(--muted); margin-bottom:20px; }
+.co-kpis { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+.ck-l { font-size:.66rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+.ck-v { font-family:'Bricolage Grotesque',sans-serif; font-size:1.35rem; font-weight:800; margin-top:2px; }
+.co-foot { padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; font-size:.73rem; color:var(--muted); }
+.co-cta { font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+
+/* STRIP */
+.strip { background:var(--card2); border:1px solid var(--border); border-radius:16px; padding:22px 28px; display:flex; gap:36px; flex-wrap:wrap; align-items:center; margin-bottom:28px; }
+.strip-l { font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em; }
+.strip-v { font-family:'Bricolage Grotesque',sans-serif; font-size:1.7rem; font-weight:800; margin-top:2px; }
+
+/* INSIGHT */
+.insight-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+.insight { background:var(--card); border:1px solid var(--border); border-left:3px solid var(--ic,var(--pe)); border-radius:12px; padding:14px 18px; }
+.insight-label { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--ic,var(--pe)); margin-bottom:5px; }
+.insight-text { font-size:.8rem; color:var(--dim); line-height:1.5; }
+
+@media (max-width:680px) { main { padding:20px 14px; } header,nav { padding:0 14px; } .kpis { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Carregando dados em tempo real...</div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">Master<em>plan</em> · Campanhas</div>
+  <div class="header-right">
+    <div class="live-dot" title="Dados ao vivo"></div>
+    <div class="period-pill" id="periodPill">Carregando...</div>
+    <button class="refresh-btn" onclick="loadData()">↻ Atualizar</button>
+  </div>
+</header>
+
+<!-- NAV -->
+<nav id="nav">
+  <button class="tab act-all" data-page="all">🌐 Visão Geral</button>
+  <button class="tab" data-page="pe">⚡ Planeta Energia</button>
+  <button class="tab" data-page="mm">🪵 Masterplan Marcenaria</button>
+  <button class="tab" data-page="ub">👟 Usaflex Belém</button>
+  <button class="tab" data-page="hv">🩴 Havaianas</button>
+</nav>
+
+<main>
+  <div class="error-bar" id="errorBar"></div>
+
+  <!-- DATE FILTER -->
+  <div class="date-filter">
+    <button class="df-btn" onclick="setDateRange('last_7d', this)">Últimos 7 dias</button>
+    <button class="df-btn active" onclick="setDateRange('last_30d', this)">Últimos 30 dias</button>
+    <button class="df-btn" onclick="setDateRange('last_90d', this)">Últimos 90 dias</button>
+    <button class="df-btn" onclick="setDateRange('this_month', this)">Este mês</button>
+    <button class="df-btn" onclick="setDateRange('last_month', this)">Mês passado</button>
+  </div>
+
+<!-- ══════ VISÃO GERAL ══════ -->
+<div id="page-all" class="page show">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-title"><span class="ph-accent" style="background:#fff;box-shadow:0 0 12px rgba(255,255,255,0.3)"></span>Visão Geral — Todas as Contas</div>
+      <div class="ph-sub">4 clientes · Meta Ads ao vivo</div>
+    </div>
+    <div class="last-update" id="lastUpdate">—</div>
+  </div>
+
+  <div class="strip" id="overallStrip">
+    <div class="strip-item"><div class="strip-l">Investimento Total</div><div class="strip-v" style="color:var(--pe)" id="ov-spend">—</div></div>
+    <div class="strip-item"><div class="strip-l">Impressões</div><div class="strip-v" id="ov-impr">—</div></div>
+    <div class="strip-item"><div class="strip-l">Cliques</div><div class="strip-v" id="ov-clicks">—</div></div>
+    <div class="strip-item"><div class="strip-l">Leads</div><div class="strip-v" id="ov-leads">—</div></div>
+    <div class="strip-item"><div class="strip-l">Resultados</div><div class="strip-v" id="ov-results">—</div></div>
+  </div>
+
+  <div class="sl">Desempenho por plataforma</div>
+  <div class="grid-23">
+    <div class="chart-card">
+      <div class="chart-title">Investimento Meta Ads por conta (R$)</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="chartSpend"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Distribuição de verba</div>
+      <div class="chart-wrap" style="height:220px;display:flex;align-items:center;justify-content:center;"><canvas id="chartDonut" style="max-height:220px;max-width:260px;"></canvas></div>
+    </div>
+  </div>
+
+  <div class="sl">Volume por conta</div>
+  <div class="grid-2">
+    <div class="chart-card">
+      <div class="chart-title">Impressões por conta (mil)</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="chartImpr"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Leads por conta</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="chartLeads"></canvas></div>
+    </div>
+  </div>
+
+  <div class="sl">Funil consolidado</div>
+  <div class="chart-card">
+    <div class="chart-title">Jornada do usuário — todas as contas Meta</div>
+    <div class="funnel" id="funnelAll"></div>
+  </div>
+
+  <div class="sl">Resumo por cliente</div>
+  <div class="co-grid">
+    <div class="co-card" style="--cc:var(--pe)" onclick="goPage('pe')">
+      <div class="co-name">⚡ Planeta Energia</div>
+      <div class="co-type">Meta Ads · Google Search · Google PMax · Google Maps</div>
+      <div class="co-kpis">
+        <div><div class="ck-l">Investimento</div><div class="ck-v" style="color:var(--pe)" id="co-pe-spend">—</div></div>
+        <div><div class="ck-l">Impressões</div><div class="ck-v" id="co-pe-impr">—</div></div>
+        <div><div class="ck-l">Cliques</div><div class="ck-v" id="co-pe-clicks">—</div></div>
+        <div><div class="ck-l">Leads</div><div class="ck-v" id="co-pe-leads">—</div></div>
+      </div>
+      <div class="co-foot"><span id="co-pe-camps">—</span><span class="co-cta" style="color:var(--pe)">Ver detalhes →</span></div>
+    </div>
+    <div class="co-card" style="--cc:var(--mm)" onclick="goPage('mm')">
+      <div class="co-name">🪵 Masterplan Marcenaria</div>
+      <div class="co-type">Meta Ads · Google Maps</div>
+      <div class="co-kpis">
+        <div><div class="ck-l">Investimento</div><div class="ck-v" style="color:var(--mm)" id="co-mm-spend">—</div></div>
+        <div><div class="ck-l">Impressões</div><div class="ck-v" id="co-mm-impr">—</div></div>
+        <div><div class="ck-l">Cliques</div><div class="ck-v" id="co-mm-clicks">—</div></div>
+        <div><div class="ck-l">Leads</div><div class="ck-v" id="co-mm-leads">—</div></div>
+      </div>
+      <div class="co-foot"><span id="co-mm-camps">—</span><span class="co-cta" style="color:var(--mm)">Ver detalhes →</span></div>
+    </div>
+    <div class="co-card" style="--cc:var(--ub)" onclick="goPage('ub')">
+      <div class="co-name">👟 Usaflex Belém</div>
+      <div class="co-type">Meta Ads · Facebook + Instagram</div>
+      <div class="co-kpis">
+        <div><div class="ck-l">Investimento</div><div class="ck-v" style="color:var(--ub)" id="co-ub-spend">—</div></div>
+        <div><div class="ck-l">Impressões</div><div class="ck-v" id="co-ub-impr">—</div></div>
+        <div><div class="ck-l">Cliques</div><div class="ck-v" id="co-ub-clicks">—</div></div>
+        <div><div class="ck-l">Leads</div><div class="ck-v" id="co-ub-leads">—</div></div>
+      </div>
+      <div class="co-foot"><span id="co-ub-camps">—</span><span class="co-cta" style="color:var(--ub)">Ver detalhes →</span></div>
+    </div>
+    <div class="co-card" style="--cc:var(--hv)" onclick="goPage('hv')">
+      <div class="co-name">🩴 Havaianas</div>
+      <div class="co-type">Meta Ads · Facebook + Instagram</div>
+      <div class="co-kpis">
+        <div><div class="ck-l">Investimento</div><div class="ck-v" style="color:var(--hv)" id="co-hv-spend">—</div></div>
+        <div><div class="ck-l">Impressões</div><div class="ck-v" id="co-hv-impr">—</div></div>
+        <div><div class="ck-l">Cliques</div><div class="ck-v" id="co-hv-clicks">—</div></div>
+        <div><div class="ck-l">Leads</div><div class="ck-v" id="co-hv-leads">—</div></div>
+      </div>
+      <div class="co-foot"><span id="co-hv-camps">—</span><span class="co-cta" style="color:var(--hv)">Ver detalhes →</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ PLANETA ENERGIA ══════ -->
+<div id="page-pe" class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-title"><span class="ph-accent" style="background:var(--pe);box-shadow:0 0 12px rgba(0,229,176,0.4)"></span>Planeta Energia</div>
+      <div class="ph-sub">Meta Ads ao vivo + Google Ads (manual)</div>
+    </div>
+  </div>
+  <div class="sl">KPIs Meta Ads ao vivo</div>
+  <div class="kpis" id="kpis-pe">
+    <div class="kpi" style="--kc:var(--pe)"><div class="kpi-tag">Investimento</div><div class="kpi-val accent" id="pe-spend">—</div></div>
+    <div class="kpi" style="--kc:#60a5fa"><div class="kpi-tag">Impressões</div><div class="kpi-val" id="pe-impr">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">Cliques</div><div class="kpi-val" id="pe-clicks">—</div></div>
+    <div class="kpi" style="--kc:var(--pe)"><div class="kpi-tag">Alcance</div><div class="kpi-val" id="pe-reach">—</div></div>
+    <div class="kpi" style="--kc:var(--pe)"><div class="kpi-tag">Leads WPP</div><div class="kpi-val accent" id="pe-leads">—</div></div>
+    <div class="kpi" style="--kc:#f87171"><div class="kpi-tag">CPL Médio</div><div class="kpi-val" id="pe-cpl">—</div></div>
+    <div class="kpi" style="--kc:#a78bfa"><div class="kpi-tag">CPM Médio</div><div class="kpi-val" id="pe-cpm">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">CTR Médio</div><div class="kpi-val" id="pe-ctr">—</div></div>
+  </div>
+  <div class="sl">Funil de conversão</div>
+  <div class="chart-card"><div class="chart-title">Funil Meta Ads — Planeta Energia</div><div class="funnel" id="funnel-pe"></div></div>
+  <div class="sl">Campanhas ativas</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Campanha</th><th>Impressões</th><th>Cliques</th><th>Spend</th><th>Leads</th><th>CPL</th><th>CTR</th><th>Perf.</th></tr></thead>
+      <tbody id="table-pe"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════ MARCENARIA ══════ -->
+<div id="page-mm" class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-title"><span class="ph-accent" style="background:var(--mm);box-shadow:0 0 12px rgba(167,139,250,0.4)"></span>Masterplan Marcenaria</div>
+      <div class="ph-sub">Meta Ads ao vivo + Google Maps (manual)</div>
+    </div>
+  </div>
+  <div class="sl">KPIs Meta Ads ao vivo</div>
+  <div class="kpis">
+    <div class="kpi" style="--kc:var(--mm)"><div class="kpi-tag">Investimento</div><div class="kpi-val accent" id="mm-spend">—</div></div>
+    <div class="kpi" style="--kc:#60a5fa"><div class="kpi-tag">Impressões</div><div class="kpi-val" id="mm-impr">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">Cliques</div><div class="kpi-val" id="mm-clicks">—</div></div>
+    <div class="kpi" style="--kc:var(--mm)"><div class="kpi-tag">Leads WPP</div><div class="kpi-val accent" id="mm-leads">—</div></div>
+    <div class="kpi" style="--kc:#f87171"><div class="kpi-tag">CPL Médio</div><div class="kpi-val" id="mm-cpl">—</div></div>
+    <div class="kpi" style="--kc:#a78bfa"><div class="kpi-tag">CPM Médio</div><div class="kpi-val" id="mm-cpm">—</div></div>
+  </div>
+  <div class="sl">Funil de conversão</div>
+  <div class="chart-card"><div class="chart-title">Funil Meta Ads — Marcenaria</div><div class="funnel" id="funnel-mm"></div></div>
+  <div class="sl">Campanhas</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Campanha</th><th>Impressões</th><th>Cliques</th><th>Spend</th><th>Leads</th><th>CPL</th><th>CTR</th><th>Perf.</th></tr></thead>
+      <tbody id="table-mm"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════ USAFLEX ══════ -->
+<div id="page-ub" class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-title"><span class="ph-accent" style="background:var(--ub);box-shadow:0 0 12px rgba(251,146,60,0.4)"></span>Usaflex Belém</div>
+      <div class="ph-sub">Meta Ads ao vivo</div>
+    </div>
+  </div>
+  <div class="sl">KPIs ao vivo</div>
+  <div class="kpis">
+    <div class="kpi" style="--kc:var(--ub)"><div class="kpi-tag">Investimento</div><div class="kpi-val accent" id="ub-spend">—</div></div>
+    <div class="kpi" style="--kc:#60a5fa"><div class="kpi-tag">Impressões</div><div class="kpi-val" id="ub-impr">—</div></div>
+    <div class="kpi" style="--kc:var(--ub)"><div class="kpi-tag">Alcance</div><div class="kpi-val" id="ub-reach">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">Cliques</div><div class="kpi-val" id="ub-clicks">—</div></div>
+    <div class="kpi" style="--kc:var(--ub)"><div class="kpi-tag">Leads WPP</div><div class="kpi-val accent" id="ub-leads">—</div></div>
+    <div class="kpi" style="--kc:var(--good)"><div class="kpi-tag">CPL Médio</div><div class="kpi-val" id="ub-cpl">—</div></div>
+    <div class="kpi" style="--kc:#a78bfa"><div class="kpi-tag">CPM Médio</div><div class="kpi-val" id="ub-cpm">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">CTR</div><div class="kpi-val" id="ub-ctr">—</div></div>
+  </div>
+  <div class="sl">Funil de conversão</div>
+  <div class="chart-card"><div class="chart-title">Funil Meta Ads — Usaflex</div><div class="funnel" id="funnel-ub"></div></div>
+  <div class="sl">Campanhas</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Campanha</th><th>Impressões</th><th>Cliques</th><th>Spend</th><th>Leads</th><th>CPL</th><th>CTR</th><th>Perf.</th></tr></thead>
+      <tbody id="table-ub"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════ HAVAIANAS ══════ -->
+<div id="page-hv" class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-title"><span class="ph-accent" style="background:var(--hv);box-shadow:0 0 12px rgba(244,63,94,0.4)"></span>Havaianas</div>
+      <div class="ph-sub">Meta Ads ao vivo</div>
+    </div>
+  </div>
+  <div class="sl">KPIs ao vivo</div>
+  <div class="kpis">
+    <div class="kpi" style="--kc:var(--hv)"><div class="kpi-tag">Investimento</div><div class="kpi-val accent" id="hv-spend">—</div></div>
+    <div class="kpi" style="--kc:#60a5fa"><div class="kpi-tag">Impressões</div><div class="kpi-val" id="hv-impr">—</div></div>
+    <div class="kpi" style="--kc:var(--hv)"><div class="kpi-tag">Alcance</div><div class="kpi-val" id="hv-reach">—</div></div>
+    <div class="kpi" style="--kc:#fbbf24"><div class="kpi-tag">Cliques</div><div class="kpi-val" id="hv-clicks">—</div></div>
+    <div class="kpi" style="--kc:var(--hv)"><div class="kpi-tag">Leads WPP</div><div class="kpi-val accent" id="hv-leads">—</div></div>
+    <div class="kpi" style="--kc:var(--good)"><div class="kpi-tag">CPL Médio</div><div class="kpi-val" id="hv-cpl">—</div></div>
+    <div class="kpi" style="--kc:#a78bfa"><div class="kpi-tag">CPM Médio</div><div class="kpi-val" id="hv-cpm">—</div></div>
+  </div>
+  <div class="sl">Funil de conversão</div>
+  <div class="chart-card"><div class="chart-title">Funil Meta Ads — Havaianas</div><div class="funnel" id="funnel-hv"></div></div>
+  <div class="sl">Campanhas</div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Campanha</th><th>Impressões</th><th>Cliques</th><th>Spend</th><th>Leads</th><th>CPL</th><th>CTR</th><th>Perf.</th></tr></thead>
+      <tbody id="table-hv"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Carregando...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+</main>
+
+<script>
+/* ── CONFIG ────────────────────────── */
+// Substitua pela URL da sua API no Vercel após o deploy
+const API_URL = window.location.hostname === 'localhost'
+  ? 'http://localhost:3000/api/meta'
+  : '/api/meta';
+
+const COLORS = { pe:'#00e5b0', mm:'#a78bfa', ub:'#fb923c', hv:'#f43f5e' };
+Chart.defaults.color = '#5a6880';
+Chart.defaults.font.family = "'Instrument Sans', sans-serif";
+Chart.defaults.font.size = 11;
+const gridColor = 'rgba(255,255,255,0.04)';
+const baseOpts = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#0f1520', titleColor:'#dde4f0', bodyColor:'#8a97b0', borderColor:'rgba(255,255,255,0.08)', borderWidth:1, padding:12, cornerRadius:10 } },
+  scales:{ x:{grid:{color:gridColor}, ticks:{color:'#5a6880'}}, y:{grid:{color:gridColor}, ticks:{color:'#5a6880'}} }
+};
+
+/* ── NAVIGATION ────────────────────── */
+const classMap = { all:'act-all', pe:'act-pe', mm:'act-mm', ub:'act-ub', hv:'act-hv' };
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => goPage(t.dataset.page));
+});
+
+function goPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('show'));
+  document.querySelectorAll('.tab').forEach(t => { t.className = 'tab'; });
+  document.getElementById('page-' + id).classList.add('show');
+  const btn = [...document.querySelectorAll('.tab')].find(t => t.dataset.page === id);
+  if (btn) btn.classList.add(classMap[id]);
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+/* ── DATE FILTER ───────────────────── */
+let currentDateRange = 'last_30d';
+function setDateRange(range, el) {
+  currentDateRange = range;
+  document.querySelectorAll('.df-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  loadData();
+}
+
+/* ── FORMATTERS ────────────────────── */
+const fmtBRL = v => 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtNum = v => parseInt(v||0).toLocaleString('pt-BR');
+const fmtK = v => { const n = parseInt(v||0); return n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'k' : n.toString(); };
+const fmtPct = v => parseFloat(v||0).toFixed(2) + '%';
+const perfBadge = cpl => {
+  if (!cpl || cpl === 0) return '';
+  if (cpl < 5)   return '<span class="perf perf-good">▲ Ótimo</span>';
+  if (cpl < 20)  return '<span class="perf perf-ok">▶ Regular</span>';
+  return '<span class="perf perf-warn">▼ Atenção</span>';
+};
+
+/* ── CHARTS ────────────────────────── */
+let charts = {};
+function makeChart(id, type, data, opts) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, { type, data, options: opts || baseOpts });
+}
+
+/* ── FUNNEL ────────────────────────── */
+function buildFunnel(id, steps, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const max = steps[0]?.value || 1;
+  let html = '';
+  steps.forEach((step, i) => {
+    const pct = Math.round((step.value / max) * 100);
+    html += `<div class="funnel-step">
+      <div class="funnel-bar-wrap">
+        <div class="funnel-bar-bg">
+          <div class="funnel-bar-fill" style="width:${pct}%;background:${color};opacity:${0.95 - i*0.15}">
+            <span class="funnel-bar-label">${step.label}</span>
+          </div>
+        </div>
+      </div>
+      <div class="funnel-meta">
+        <div class="funnel-num">${fmtNum(step.value)}</div>
+        ${i > 0 ? `<div class="funnel-pct">${pct}% do topo</div>` : ''}
+      </div>
+    </div>`;
+    if (i < steps.length - 1) {
+      const rate = step.value > 0 ? ((steps[i+1].value / step.value) * 100).toFixed(1) : '0';
+      html += `<div class="funnel-arrow"><div class="funnel-arrow-line">▼ taxa</div><div class="funnel-arrow-rate">${rate}% → próx. etapa</div></div>`;
+    }
+  });
+  el.innerHTML = html;
+}
+
+/* ── RENDER CLIENT ─────────────────── */
+function renderClient(key, color, data) {
+  if (!data || data.error) return;
+  const t = data.totals;
+  const prefix = key.split('_')[0];
+  const short = { planeta_energia:'pe', masterplan_marcenaria:'mm', usaflex:'ub', havaianas:'hv' }[key] || key;
+
+  // KPI cards
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set(`${short}-spend`, fmtBRL(t.spend));
+  set(`${short}-impr`,  fmtK(t.impressions));
+  set(`${short}-clicks`, fmtNum(t.clicks));
+  set(`${short}-reach`, fmtK(t.reach));
+  set(`${short}-leads`, fmtNum(t.leads));
+  set(`${short}-cpl`,   t.cpl > 0 ? fmtBRL(t.cpl) : '—');
+  set(`${short}-cpm`,   fmtBRL(t.cpm));
+  set(`${short}-ctr`,   fmtPct(t.ctr));
+
+  // Overview card
+  set(`co-${short}-spend`,  fmtBRL(t.spend));
+  set(`co-${short}-impr`,   fmtK(t.impressions));
+  set(`co-${short}-clicks`, fmtNum(t.clicks));
+  set(`co-${short}-leads`,  fmtNum(t.leads));
+  set(`co-${short}-camps`,  `${data.campaigns.length} campanha${data.campaigns.length !== 1 ? 's' : ''}`);
+
+  // Funnel
+  buildFunnel(`funnel-${short}`, [
+    { label:'Impressões', value: t.impressions },
+    { label:'Cliques',    value: t.clicks },
+    { label:'Leads',      value: t.leads }
+  ], color);
+
+  // Table
+  const tbody = document.getElementById(`table-${short}`);
+  if (tbody) {
+    if (!data.campaigns.length) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Nenhuma campanha encontrada</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.campaigns.map(c => `
+      <tr>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.campaign}">${c.campaign}</td>
+        <td>${fmtK(c.impressions)}</td>
+        <td>${fmtNum(c.clicks)}</td>
+        <td>${fmtBRL(c.spend)}</td>
+        <td>${fmtNum(c.leads)}</td>
+        <td>${c.cpr ? fmtBRL(c.cpr) : '—'}</td>
+        <td>${fmtPct(c.ctr)}</td>
+        <td>${perfBadge(c.cpr)}</td>
+      </tr>`).join('');
+  }
+}
+
+/* ── LOAD DATA ─────────────────────── */
+async function loadData() {
+  const overlay = document.getElementById('loadingOverlay');
+  const errorBar = document.getElementById('errorBar');
+  overlay.classList.remove('hidden');
+  errorBar.classList.remove('show');
+
+  try {
+    const res = await fetch(`${API_URL}?dateRange=${currentDateRange}`);
+    const data = await res.json();
+
+    if (data.error) throw new Error(data.error);
+
+    // Period pill
+    const periodLabels = { last_7d:'Últimos 7 dias', last_30d:'Últimos 30 dias', last_90d:'Últimos 90 dias', this_month:'Este mês', last_month:'Mês passado' };
+    document.getElementById('periodPill').textContent = periodLabels[currentDateRange] || currentDateRange;
+    document.getElementById('lastUpdate').textContent = '↻ Atualizado: ' + new Date(data.updatedAt).toLocaleString('pt-BR');
+
+    // Overall strip
+    const ov = data.overall;
+    document.getElementById('ov-spend').textContent   = fmtBRL(ov.spend);
+    document.getElementById('ov-impr').textContent    = fmtK(ov.impressions);
+    document.getElementById('ov-clicks').textContent  = fmtNum(ov.clicks);
+    document.getElementById('ov-leads').textContent   = fmtNum(ov.leads);
+    document.getElementById('ov-results').textContent = fmtNum(ov.totalResults);
+
+    const clients = data.clients;
+    const cKeys = ['planeta_energia','masterplan_marcenaria','usaflex','havaianas'];
+    const cColors = [COLORS.pe, COLORS.mm, COLORS.ub, COLORS.hv];
+    const cLabels = ['Planeta Energia','Marcenaria','Usaflex','Havaianas'];
+
+    cKeys.forEach((k, i) => renderClient(k, cColors[i], clients[k]));
+
+    // Overview charts
+    const spends = cKeys.map(k => clients[k]?.totals?.spend || 0);
+    const imprs  = cKeys.map(k => (clients[k]?.totals?.impressions || 0) / 1000);
+    const leads  = cKeys.map(k => clients[k]?.totals?.leads || 0);
+
+    makeChart('chartSpend', 'bar', {
+      labels: cLabels,
+      datasets: [{ label:'Investimento (R$)', data:spends, backgroundColor:cColors.map(c=>c+'cc'), borderRadius:10, borderSkipped:false }]
+    }, { ...baseOpts, plugins:{ ...baseOpts.plugins, tooltip:{ ...baseOpts.plugins.tooltip, callbacks:{ label: ctx => ' R$ '+ctx.raw.toLocaleString('pt-BR',{minimumFractionDigits:2}) } } } });
+
+    makeChart('chartDonut', 'doughnut', {
+      labels: cLabels,
+      datasets: [{ data:spends, backgroundColor:cColors.map(c=>c+'cc'), borderWidth:2, borderColor:'#06090f', hoverOffset:8 }]
+    }, { responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{ display:true, position:'right', labels:{ color:'#8a97b0', padding:10, font:{size:10}, boxWidth:10, boxHeight:10 } }, tooltip:{ ...baseOpts.plugins.tooltip, callbacks:{ label: ctx => ' R$ '+ctx.raw.toLocaleString('pt-BR',{minimumFractionDigits:2}) } } } });
+
+    makeChart('chartImpr', 'bar', {
+      labels: cLabels,
+      datasets: [{ label:'Impressões (mil)', data:imprs, backgroundColor:cColors.map(c=>c+'cc'), borderRadius:10, borderSkipped:false }]
+    });
+
+    makeChart('chartLeads', 'bar', {
+      labels: cLabels,
+      datasets: [{ label:'Leads', data:leads, backgroundColor:cColors.map(c=>c+'cc'), borderRadius:10, borderSkipped:false }]
+    });
+
+    buildFunnel('funnelAll', [
+      { label:'Impressões', value: ov.impressions },
+      { label:'Cliques',    value: ov.clicks },
+      { label:'Leads',      value: ov.leads }
+    ], '#ffffff');
+
+  } catch (err) {
+    errorBar.textContent = '⚠️ Erro ao carregar dados: ' + err.message + ' — Verifique as credenciais da API no Vercel.';
+    errorBar.classList.add('show');
+    console.error(err);
+  } finally {
+    overlay.classList.add('hidden');
+  }
+}
+
+loadData();
+</script>
+</body>
+</html>
